@@ -1,47 +1,32 @@
-// Smart token router — uses the cheapest model that can handle the task well
-
 export type ModelTier = "fast" | "standard" | "powerful";
+export type Provider = "groq" | "gemini" | "claude" | "openai" | "auto";
 
 export interface ModelChoice {
-  provider: "groq" | "gemini";
+  provider: "groq" | "gemini" | "claude" | "openai";
   model: string;
   tier: ModelTier;
   label: string;
+  supportsWebSearch: boolean;
 }
 
-// Model definitions
 export const MODELS: Record<string, ModelChoice> = {
-  // Fast & free — simple tasks
-  groq_fast: {
-    provider: "groq",
-    model: "llama-3.1-8b-instant",
-    tier: "fast",
-    label: "Llama 3.1 8B (Fast)",
-  },
-  // Standard — most everyday tasks
-  groq_standard: {
-    provider: "groq",
-    model: "llama-3.3-70b-versatile",
-    tier: "standard",
-    label: "Llama 3.3 70B",
-  },
-  // Google standard
-  gemini_flash: {
-    provider: "gemini",
-    model: "gemini-1.5-flash",
-    tier: "standard",
-    label: "Gemini 1.5 Flash",
-  },
-  // Most powerful — synthesis, complex reasoning
-  gemini_pro: {
-    provider: "gemini",
-    model: "gemini-1.5-pro",
-    tier: "powerful",
-    label: "Gemini 1.5 Pro",
-  },
+  // Groq - ultra fast, no web search
+  groq_fast: { provider: "groq", model: "llama-3.1-8b-instant", tier: "fast", label: "Llama 3.1 8B (Fast)", supportsWebSearch: false },
+  groq_standard: { provider: "groq", model: "llama-3.3-70b-versatile", tier: "standard", label: "Llama 3.3 70B", supportsWebSearch: false },
+
+  // Gemini - with Google Search grounding
+  gemini_flash: { provider: "gemini", model: "gemini-1.5-flash", tier: "standard", label: "Gemini 1.5 Flash", supportsWebSearch: true },
+  gemini_pro: { provider: "gemini", model: "gemini-1.5-pro", tier: "powerful", label: "Gemini 1.5 Pro", supportsWebSearch: true },
+
+  // Claude - powerful reasoning
+  claude_haiku: { provider: "claude", model: "claude-haiku-4-5-20251001", tier: "fast", label: "Claude Haiku (Fast)", supportsWebSearch: false },
+  claude_sonnet: { provider: "claude", model: "claude-sonnet-4-6", tier: "powerful", label: "Claude Sonnet", supportsWebSearch: false },
+
+  // OpenAI - with web search
+  openai_mini: { provider: "openai", model: "gpt-4o-mini", tier: "standard", label: "GPT-4o Mini", supportsWebSearch: true },
+  openai_4o: { provider: "openai", model: "gpt-4o", tier: "powerful", label: "GPT-4o", supportsWebSearch: true },
 };
 
-// Keywords that signal a task needs a powerful model
 const COMPLEX_SIGNALS = [
   "synthesize", "summarize everything", "analyze in depth", "compare and contrast",
   "write a detailed", "create a comprehensive", "evaluate", "critique", "strategic",
@@ -49,62 +34,79 @@ const COMPLEX_SIGNALS = [
   "technical architecture", "review this document", "rewrite", "improve this",
 ];
 
-// Keywords that are clearly simple lookups
 const SIMPLE_SIGNALS = [
   "what is", "define", "who is", "when did", "how many", "quick", "briefly",
   "tldr", "short answer", "yes or no", "summarize in one", "spell check",
 ];
 
-export function classifyPrompt(message: string): ModelTier {
+const WEB_SIGNALS = [
+  "today", "latest", "current", "recent", "news", "now", "price", "weather",
+  "stock", "score", "update", "this week", "this month", "2024", "2025", "2026",
+  "who won", "what happened", "live", "right now", "search", "find online",
+];
+
+export function classifyPrompt(message: string): { tier: ModelTier; needsWeb: boolean } {
   const lower = message.toLowerCase().trim();
   const wordCount = lower.split(/\s+/).length;
+  const needsWeb = WEB_SIGNALS.some((s) => lower.includes(s));
 
-  // Very short messages → fast
   if (wordCount < 15 && !COMPLEX_SIGNALS.some((s) => lower.includes(s))) {
-    return "fast";
+    return { tier: "fast", needsWeb };
   }
-
-  // Simple signal keywords → fast
   if (SIMPLE_SIGNALS.some((s) => lower.includes(s)) && wordCount < 40) {
-    return "fast";
+    return { tier: "fast", needsWeb };
   }
-
-  // Complex signals → powerful
   if (COMPLEX_SIGNALS.some((s) => lower.includes(s)) || wordCount > 120) {
-    return "powerful";
+    return { tier: "powerful", needsWeb };
   }
-
-  // Default → standard
-  return "standard";
+  return { tier: "standard", needsWeb };
 }
 
-export function selectModel(
-  tier: ModelTier,
-  preferredProvider?: "groq" | "gemini"
-): ModelChoice {
+export function autoSelectModel(message: string, preferredProvider?: Provider, webSearchEnabled?: boolean): ModelChoice {
+  const { tier, needsWeb } = classifyPrompt(message);
+  const useWeb = webSearchEnabled || needsWeb;
+
+  // If web search needed, prefer models that support it
+  if (useWeb) {
+    if (preferredProvider === "gemini") return MODELS.gemini_flash;
+    if (preferredProvider === "openai") return tier === "powerful" ? MODELS.openai_4o : MODELS.openai_mini;
+    // Auto with web: default to Gemini (free search) for standard, GPT-4o for powerful
+    return tier === "powerful" ? MODELS.gemini_pro : MODELS.gemini_flash;
+  }
+
+  // No web search needed
+  if (preferredProvider === "claude") return tier === "fast" ? MODELS.claude_haiku : MODELS.claude_sonnet;
+  if (preferredProvider === "openai") return tier === "powerful" ? MODELS.openai_4o : MODELS.openai_mini;
+  if (preferredProvider === "gemini") return tier === "powerful" ? MODELS.gemini_pro : MODELS.gemini_flash;
+  if (preferredProvider === "groq") return tier === "fast" ? MODELS.groq_fast : MODELS.groq_standard;
+
+  // Auto routing: fast=groq, standard=gemini, powerful=claude
   if (tier === "fast") return MODELS.groq_fast;
-  if (tier === "powerful") {
-    return preferredProvider === "groq" ? MODELS.groq_standard : MODELS.gemini_pro;
-  }
-  // Standard
-  if (preferredProvider === "gemini") return MODELS.gemini_flash;
-  return MODELS.groq_standard;
+  if (tier === "powerful") return MODELS.claude_sonnet;
+  return MODELS.gemini_flash;
 }
 
-export function autoSelectModel(message: string, preferredProvider?: "groq" | "gemini"): ModelChoice {
-  const tier = classifyPrompt(message);
-  return selectModel(tier, preferredProvider);
-}
-
-// For compare mode — one of each provider at standard tier
-export const COMPARE_MODELS = {
-  groq: MODELS.groq_standard,
-  gemini: MODELS.gemini_flash,
+// For compare mode - pick two different providers
+export const COMPARE_PAIRS: Record<string, [ModelChoice, ModelChoice]> = {
+  "groq-gemini": [MODELS.groq_standard, MODELS.gemini_flash],
+  "groq-openai": [MODELS.groq_standard, MODELS.openai_mini],
+  "groq-claude": [MODELS.groq_standard, MODELS.claude_sonnet],
+  "gemini-openai": [MODELS.gemini_flash, MODELS.openai_mini],
+  "gemini-claude": [MODELS.gemini_flash, MODELS.claude_sonnet],
+  "openai-claude": [MODELS.openai_4o, MODELS.claude_sonnet],
 };
 
-// For best answer ensemble
+// Best Answer ensemble - best combo for quality
 export const ENSEMBLE_MODELS = {
-  drafter: MODELS.groq_standard,   // Fast draft
-  critic: MODELS.gemini_flash,      // Efficient critique
-  synthesizer: MODELS.gemini_pro,   // Best final output
+  drafter: MODELS.openai_mini,      // Fast, good draft
+  critic: MODELS.gemini_flash,       // Google search grounding for fact-check
+  synthesizer: MODELS.claude_sonnet, // Claude for best final output
 };
+
+export const ALL_PROVIDERS: { id: Provider; label: string; color: string }[] = [
+  { id: "auto", label: "Auto", color: "blue" },
+  { id: "groq", label: "Groq", color: "emerald" },
+  { id: "gemini", label: "Gemini", color: "amber" },
+  { id: "openai", label: "ChatGPT", color: "green" },
+  { id: "claude", label: "Claude", color: "purple" },
+];

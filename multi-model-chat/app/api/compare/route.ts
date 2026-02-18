@@ -2,44 +2,51 @@ import { NextRequest, NextResponse } from "next/server";
 import { saveMessage } from "@/lib/db";
 import { groqChat } from "@/lib/groq";
 import { geminiChat } from "@/lib/gemini";
-import { COMPARE_MODELS } from "@/lib/router";
+import { claudeChat } from "@/lib/claude";
+import { openaiChat } from "@/lib/openai";
+import { MODELS, ModelChoice } from "@/lib/router";
 import { buildKnowledgeContext } from "@/lib/knowledge";
+
+async function callModel(model: ModelChoice, messages: { role: "user" | "assistant"; content: string }[], systemPrompt: string, webSearch: boolean): Promise<string> {
+  if (model.provider === "groq") return groqChat(messages, model.model, systemPrompt);
+  if (model.provider === "claude") return claudeChat(messages, model.model, systemPrompt);
+  if (model.provider === "gemini") {
+    const r = await geminiChat(messages, model.model, systemPrompt, webSearch && model.supportsWebSearch);
+    return r.response;
+  }
+  const r = await openaiChat(messages, model.model, systemPrompt, webSearch && model.supportsWebSearch);
+  return r.response;
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const { message, sessionId, userName, departments = [] } = await req.json();
-
-    if (!message || !sessionId || !userName) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-    }
+    const { message, sessionId, userName, departments = [], modelA = "gemini_flash", modelB = "openai_mini", webSearch = false } = await req.json();
 
     const knowledgeContext = await buildKnowledgeContext(departments);
     const systemPrompt = knowledgeContext
       ? `You are a helpful AI assistant for a professional team.\n\n${knowledgeContext}`
       : "You are a helpful AI assistant for a professional team. Be clear, accurate, and concise.";
 
+    const chosenA = MODELS[modelA] || MODELS.gemini_flash;
+    const chosenB = MODELS[modelB] || MODELS.openai_mini;
     const messages = [{ role: "user" as const, content: message }];
 
-    // Fire both models in parallel — saves time and tokens
-    const [groqResponse, geminiResponse] = await Promise.all([
-      groqChat(messages, COMPARE_MODELS.groq.model, systemPrompt),
-      geminiChat(messages, COMPARE_MODELS.gemini.model, systemPrompt),
+    const [responseA, responseB] = await Promise.all([
+      callModel(chosenA, messages, systemPrompt, webSearch),
+      callModel(chosenB, messages, systemPrompt, webSearch),
     ]);
 
-    // Save to DB
     await saveMessage(sessionId, userName, "user", message, "", "compare");
     await saveMessage(sessionId, userName, "assistant",
-      `**Groq (${COMPARE_MODELS.groq.label}):**\n${groqResponse}\n\n---\n\n**Gemini (${COMPARE_MODELS.gemini.label}):**\n${geminiResponse}`,
+      `**${chosenA.label}:**\n${responseA}\n\n---\n\n**${chosenB.label}:**\n${responseB}`,
       "compare", "compare"
     );
 
     return NextResponse.json({
-      groq: { response: groqResponse, model: COMPARE_MODELS.groq.label },
-      gemini: { response: geminiResponse, model: COMPARE_MODELS.gemini.label },
+      modelA: { response: responseA, model: chosenA.label, provider: chosenA.provider },
+      modelB: { response: responseB, model: chosenB.label, provider: chosenB.provider },
     });
   } catch (e: unknown) {
-    console.error("Compare error:", e);
-    const message = e instanceof Error ? e.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
   }
 }
