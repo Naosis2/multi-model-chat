@@ -11,7 +11,7 @@ export async function groqChat(
   messages: Message[],
   model: string = "llama-3.3-70b-versatile",
   systemPrompt?: string
-): Promise<{ text: string; sources?: string[] }> {
+): Promise<{ response: string; searchedWeb: boolean }> {
   const allMessages: Message[] = systemPrompt
     ? [{ role: "system", content: systemPrompt }, ...messages]
     : messages;
@@ -23,5 +23,8 @@ export async function groqChat(
     temperature: 0.7,
   });
 
-  return { text: completion.choices[0]?.message?.content || "No response generated." };
+  return {
+    response: completion.choices[0]?.message?.content || "No response generated.",
+    searchedWeb: false,
+  };
 }

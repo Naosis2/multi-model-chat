@@ -29,33 +29,30 @@ export async function POST(req: NextRequest) {
       ? `You are a helpful AI assistant for a professional team.\n\n${knowledgeContext}`
       : "You are a helpful AI assistant for a professional team. Be clear, accurate, and concise.";
 
-    let response: string;
-    let searchedWeb = false;
-    const useWebSearch = webSearch || chosen.supportsWebSearch && webSearch;
+    const useWebSearch = webSearch && chosen.supportsWebSearch;
+
+    let result: { response: string; searchedWeb: boolean };
 
     if (chosen.provider === "groq") {
-      response = await groqChat(messages, chosen.model, systemPrompt);
+      result = await groqChat(messages, chosen.model, systemPrompt);
     } else if (chosen.provider === "gemini") {
-      const result = await geminiChat(messages, chosen.model, systemPrompt, useWebSearch);
-      response = result.response;
-      searchedWeb = result.searchedWeb;
+      result = await geminiChat(messages, chosen.model, systemPrompt, useWebSearch);
     } else if (chosen.provider === "claude") {
-      response = await claudeChat(messages, chosen.model, systemPrompt);
+      const text = await claudeChat(messages, chosen.model, systemPrompt);
+      result = { response: text, searchedWeb: false };
     } else {
-      const result = await openaiChat(messages, chosen.model, systemPrompt, useWebSearch);
-      response = result.response;
-      searchedWeb = result.searchedWeb;
+      result = await openaiChat(messages, chosen.model, systemPrompt, useWebSearch);
     }
 
     await saveMessage(sessionId, userName, "user", message, "", "single");
-    await saveMessage(sessionId, userName, "assistant", response, chosen.label, "single");
+    await saveMessage(sessionId, userName, "assistant", result.response, chosen.label, "single");
 
     return NextResponse.json({
-      response,
+      response: result.response,
       model: chosen.label,
       tier: chosen.tier,
       provider: chosen.provider,
-      searchedWeb,
+      searchedWeb: result.searchedWeb,
     });
   } catch (e: unknown) {
     console.error("Chat error:", e);

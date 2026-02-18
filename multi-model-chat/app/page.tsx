@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import {
   Send, Zap, GitCompare, Trophy, BookOpen, LogOut,
   ChevronDown, Cpu, Loader2, AlertCircle, CheckCircle2,
-  Building2, Users, Globe, GlobeOff
+  Building2, Users, Globe, Search
 } from "lucide-react";
 import { ALL_PROVIDERS, MODELS } from "@/lib/router";
 
@@ -299,7 +299,7 @@ export default function Home() {
             } ${(provider === "groq" || provider === "claude") ? "opacity-40 cursor-not-allowed" : "cursor-pointer hover:opacity-90"}`}>
             {webSearch && provider !== "groq" && provider !== "claude"
               ? <Globe className="w-4 h-4" />
-              : <GlobeOff className="w-4 h-4" />}
+              : <Search className="w-4 h-4" />}
             <div>
               <div className="text-sm font-medium">{webSearch && provider !== "groq" && provider !== "claude" ? "Search ON" : "Search OFF"}</div>
               <div className="text-xs opacity-60">
