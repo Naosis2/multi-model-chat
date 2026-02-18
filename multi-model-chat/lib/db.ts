@@ -88,7 +88,7 @@ export async function deleteKnowledge(id: number) {
 
 export async function getKnowledgeLayers() {
   const rows = await sql`SELECT DISTINCT layer FROM knowledge ORDER BY layer`;
-  return rows.map((r: { layer: string }) => r.layer);
+  return rows.map((r) => (r as { layer: string }).layer);
 }
 
 export default sql;
