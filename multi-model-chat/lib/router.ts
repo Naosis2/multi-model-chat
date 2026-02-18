@@ -15,8 +15,8 @@ export const MODELS: Record<string, ModelChoice> = {
   groq_standard: { provider: "groq", model: "llama-3.3-70b-versatile", tier: "standard", label: "Llama 3.3 70B", supportsWebSearch: false },
 
   // Gemini - with Google Search grounding
-  gemini_flash: { provider: "gemini", model: "gemini-1.5-flash", tier: "standard", label: "Gemini 1.5 Flash", supportsWebSearch: true },
-  gemini_pro: { provider: "gemini", model: "gemini-1.5-pro", tier: "powerful", label: "Gemini 1.5 Pro", supportsWebSearch: true },
+  gemini_flash: { provider: "gemini", model: "gemini-2.0-flash", tier: "standard", label: "Gemini 2.0 Flash", supportsWebSearch: true },
+  gemini_pro: { provider: "gemini", model: "gemini-2.0-pro", tier: "powerful", label: "Gemini 2.0 Pro", supportsWebSearch: true },
 
   // Claude - powerful reasoning
   claude_haiku: { provider: "claude", model: "claude-haiku-4-5-20251001", tier: "fast", label: "Claude Haiku (Fast)", supportsWebSearch: false },
