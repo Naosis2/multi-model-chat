@@ -13,18 +13,20 @@ async function callModel(
   systemPrompt: string,
   webSearch: boolean
 ): Promise<string> {
+  const useWeb = webSearch && model.supportsWebSearch;
   if (model.provider === "groq") {
-    const r = await groqChat(messages, model.model, systemPrompt);
+    const r = await groqChat(messages, model.model, systemPrompt, useWeb);
     return r.response;
   }
   if (model.provider === "claude") {
-    return claudeChat(messages, model.model, systemPrompt);
-  }
-  if (model.provider === "gemini") {
-    const r = await geminiChat(messages, model.model, systemPrompt, webSearch && model.supportsWebSearch);
+    const r = await claudeChat(messages, model.model, systemPrompt, useWeb);
     return r.response;
   }
-  const r = await openaiChat(messages, model.model, systemPrompt, webSearch && model.supportsWebSearch);
+  if (model.provider === "gemini") {
+    const r = await geminiChat(messages, model.model, systemPrompt, useWeb);
+    return r.response;
+  }
+  const r = await openaiChat(messages, model.model, systemPrompt, useWeb);
   return r.response;
 }
 

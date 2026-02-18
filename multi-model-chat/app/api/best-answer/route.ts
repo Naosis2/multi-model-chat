@@ -15,39 +15,38 @@ export async function POST(req: NextRequest) {
       ? `You are a helpful AI assistant for a professional team.\n\n${knowledgeContext}`
       : "You are a helpful AI assistant for a professional team.";
 
-    // Step A: GPT-4o Mini drafts (fast + optional web search)
+    // Step A: GPT-4o Mini drafts (+ web search if enabled)
     const draftResult = await openaiChat(
       [{ role: "user", content: message }],
       ENSEMBLE_MODELS.drafter.model,
       baseSystem + "\nProvide a thorough, well-structured response.",
       webSearch
     );
-    const draft = draftResult.response;
 
-    // Step B: Gemini Flash critiques with Google Search grounding for fact-checking
+    // Step B: Gemini fact-checks with Google Search grounding (always on for critique)
     const critiqueResult = await geminiChat(
-      [{ role: "user", content: `Review this AI response to the question and identify gaps, inaccuracies, or improvements.\n\nQuestion: "${message}"\n\nDraft:\n${draft}\n\nProvide a concise critique with specific improvements.` }],
+      [{ role: "user", content: `Review this AI response and identify gaps, inaccuracies, or improvements.\n\nQuestion: "${message}"\n\nDraft:\n${draftResult.response}\n\nProvide a concise critique with specific improvements.` }],
       ENSEMBLE_MODELS.critic.model,
       "You are an expert AI response reviewer. Be specific and constructive.",
-      true // Always use web search for critique/fact-checking
+      true
     );
-    const critique = critiqueResult.response;
 
-    // Step C: Claude Sonnet synthesizes the best final answer
-    const final = await claudeChat(
-      [{ role: "user", content: `Synthesize the best possible answer using the draft and critique below.\n\nQuestion: "${message}"\n\nDraft:\n${draft}\n\nCritique:\n${critique}\n\nWrite the final, improved response directly. Do not mention the draft or critique process.` }],
+    // Step C: Claude Sonnet synthesizes with web search context if needed
+    const finalResult = await claudeChat(
+      [{ role: "user", content: `Synthesize the best possible answer using the draft and critique.\n\nQuestion: "${message}"\n\nDraft:\n${draftResult.response}\n\nCritique:\n${critiqueResult.response}\n\nWrite the final improved response directly without mentioning the process.` }],
       ENSEMBLE_MODELS.synthesizer.model,
-      baseSystem + "\nWrite the final, polished, authoritative response."
+      baseSystem + "\nWrite the final, polished, authoritative response.",
+      webSearch
     );
 
     await saveMessage(sessionId, userName, "user", message, "", "best-answer");
-    await saveMessage(sessionId, userName, "assistant", final, "Best Answer Ensemble", "best-answer");
+    await saveMessage(sessionId, userName, "assistant", finalResult.response, "Best Answer Ensemble", "best-answer");
 
     return NextResponse.json({
-      draft,
-      critique,
-      final,
-      searchedWeb: webSearch || true,
+      draft: draftResult.response,
+      critique: critiqueResult.response,
+      final: finalResult.response,
+      searchedWeb: webSearch,
       models: {
         drafter: ENSEMBLE_MODELS.drafter.label,
         critic: ENSEMBLE_MODELS.critic.label + " (+ Google Search)",

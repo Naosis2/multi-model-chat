@@ -30,16 +30,14 @@ export async function POST(req: NextRequest) {
       : "You are a helpful AI assistant for a professional team. Be clear, accurate, and concise.";
 
     const useWebSearch = webSearch && chosen.supportsWebSearch;
-
     let result: { response: string; searchedWeb: boolean };
 
     if (chosen.provider === "groq") {
-      result = await groqChat(messages, chosen.model, systemPrompt);
+      result = await groqChat(messages, chosen.model, systemPrompt, useWebSearch);
     } else if (chosen.provider === "gemini") {
       result = await geminiChat(messages, chosen.model, systemPrompt, useWebSearch);
     } else if (chosen.provider === "claude") {
-      const text = await claudeChat(messages, chosen.model, systemPrompt);
-      result = { response: text, searchedWeb: false };
+      result = await claudeChat(messages, chosen.model, systemPrompt, useWebSearch);
     } else {
       result = await openaiChat(messages, chosen.model, systemPrompt, useWebSearch);
     }

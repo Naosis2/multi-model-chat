@@ -9,7 +9,7 @@ export interface Message {
 
 export async function geminiChat(
   messages: Message[],
-  model: string = "gemini-2.0-flash",
+  model: string = "gemini-1.5-flash",
   systemPrompt?: string,
   webSearch: boolean = false
 ): Promise<{ response: string; searchedWeb: boolean }> {
